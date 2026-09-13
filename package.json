@@ -129,7 +129,7 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "vsce package",
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

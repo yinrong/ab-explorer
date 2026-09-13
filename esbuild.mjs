@@ -16,6 +16,13 @@ function copyCodicons() {
   }
 }
 
+// webview/ 不进 vsix，样式表随 bundle 一起落到 dist/
+function copyWebviewAssets() {
+  const destDir = join(__dirname, 'dist');
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(join(__dirname, 'webview', 'style.css'), join(destDir, 'style.css'));
+}
+
 const extensionCtx = await esbuild.context({
   entryPoints: [join(__dirname, 'src', 'extension.ts')],
   bundle: true,
@@ -40,6 +47,7 @@ const webviewCtx = await esbuild.context({
 });
 
 copyCodicons();
+copyWebviewAssets();
 
 if (watch) {
   await extensionCtx.watch();

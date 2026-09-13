@@ -9,9 +9,10 @@ test/**
 40-任务排序/**
 50-验收清单/**
 执行过程/**
+测试输出/**
 rm/**
 .gitignore
 esbuild.mjs
 tsconfig.json
-*.map
+**/*.map
 node_modules/@vscode/codicons/**
