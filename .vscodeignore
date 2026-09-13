@@ -1,0 +1,16 @@
+.vscode/**
+src/**
+webview/**
+test/**
+10-原始需求/**
+15-核心需求/**
+20-待办/**
+40-任务排序/**
+50-验收清单/**
+执行过程/**
+rm/**
+.gitignore
+esbuild.mjs
+tsconfig.json
+*.map
+node_modules/@vscode/codicons/**

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(git checkout *)",
+      "Bash(mkdir -p 10-原始需求 15-核心需求 40-任务排序 50-验收清单)",
+      "Bash(npm install *)"
+    ]
+  }
+}

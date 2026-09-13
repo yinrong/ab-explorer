@@ -1,0 +1,146 @@
+{
+  "name": "ab-explorer",
+  "displayName": "AB Explorer",
+  "description": "双区资源管理器：A 区横向标签导航目录，B 区层级树，自动切换标签/下钻两种显示模式",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "abExplorerContainer",
+          "title": "AB Explorer",
+          "icon": "media/activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "abExplorerContainer": [
+        {
+          "id": "abExplorer.view",
+          "name": "AB Explorer",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "abExplorer.refresh",
+        "title": "AB Explorer: 刷新",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "abExplorer.newFile",
+        "title": "新建文件"
+      },
+      {
+        "command": "abExplorer.newFolder",
+        "title": "新建文件夹"
+      },
+      {
+        "command": "abExplorer.rename",
+        "title": "重命名"
+      },
+      {
+        "command": "abExplorer.delete",
+        "title": "删除"
+      },
+      {
+        "command": "abExplorer.revealInOS",
+        "title": "在文件资源管理器中显示"
+      },
+      {
+        "command": "abExplorer.copyPath",
+        "title": "复制路径"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "abExplorer.refresh",
+          "when": "view == abExplorer.view",
+          "group": "navigation"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "abExplorer.newFile",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "1_new"
+        },
+        {
+          "command": "abExplorer.newFolder",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "1_new"
+        },
+        {
+          "command": "abExplorer.rename",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "2_mod"
+        },
+        {
+          "command": "abExplorer.delete",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "2_mod"
+        },
+        {
+          "command": "abExplorer.revealInOS",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "3_ref"
+        },
+        {
+          "command": "abExplorer.copyPath",
+          "when": "webviewId == abExplorer.view && webviewSection == entry",
+          "group": "3_ref"
+        },
+        {
+          "command": "abExplorer.newFile",
+          "when": "webviewId == abExplorer.view && webviewSection == root",
+          "group": "1_new"
+        },
+        {
+          "command": "abExplorer.newFolder",
+          "when": "webviewId == abExplorer.view && webviewSection == root",
+          "group": "1_new"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AB Explorer",
+      "properties": {
+        "abExplorer.excludeDefaults": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否附加使用 files.exclude 过滤条目"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/codicons": "^0.0.36",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true,
+    "@vscode/vsce-sign@2.1.0": true
+  }
+}
