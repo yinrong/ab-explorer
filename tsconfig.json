@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "noEmit": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src", "webview", "test"]
 }
