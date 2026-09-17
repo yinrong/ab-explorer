@@ -65,7 +65,9 @@ function partialMatchPrefix(a: string, b: string): string | null {
  * 的假分组。
  */
 export function compressLabels(names: string[]): LabeledEntry[] {
-  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  // numeric: true 让内嵌的数字段按数值比较（agent2 < agent10），而不是按字符逐位比较
+  // （旧行为会把 agent10 排到 agent2 前面，压缩完的标签数字顺序看起来是乱的）。
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const result: LabeledEntry[] = [];
   let i = 0;
 

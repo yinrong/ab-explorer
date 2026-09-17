@@ -114,11 +114,11 @@ test('组内差异部分整体共享一段字母+纯数字尾巴时，只留第�
     'soft_company-agent10',
   ];
   const result = compressLabels(names);
-  // 目录名按字符串排序（不是数值排序），所以 "agent10" 排在 "agent2" 前面——
-  // 这是排序方式本身带来的、和这条压缩规则无关的既有行为。
+  // 目录名按数值感知排序（"agent2" < "agent10"），所以数字尾巴压缩后
+  // 仍然是从小到大的直观顺序。
   assert.deepEqual(
     result.map((r) => r.label),
-    ['soft_company', '-agent1', '-10', '-2', '-3'],
+    ['soft_company', '-agent1', '-2', '-3', '-10'],
   );
 });
 
@@ -128,6 +128,14 @@ test('数字尾巴压缩只在同一分组内的连续同字母前缀上生效�
   assert.deepEqual(
     result.map((r) => r.label),
     ['3d-man1', '-agent1', '-agent2'],
+  );
+});
+
+test('排序按数值感知，agent10 不会排到 agent2 前面', () => {
+  const result = compressLabels(['x-agent10', 'x-agent2', 'x-agent1']);
+  assert.deepEqual(
+    result.map((r) => r.name),
+    ['x-agent1', 'x-agent2', 'x-agent10'],
   );
 });
 
