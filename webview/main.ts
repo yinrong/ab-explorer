@@ -1,10 +1,20 @@
 import { compressLabels } from './prefix';
+import { visitIntensity } from './frequency';
 import { truncateAndSet, drillDownTo, backOffOne } from './statemachine';
 
 interface Entry {
   name: string;
   isDir: boolean;
+  gitDirty?: boolean;
 }
+
+interface Toggles {
+  groupBox: boolean;
+  freqColor: boolean;
+  gitDirty: boolean;
+}
+
+const DEFAULT_TOGGLES: Toggles = { groupBox: true, freqColor: true, gitDirty: true };
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -23,8 +33,11 @@ const vscodeApi = acquireVsCodeApi();
 
 let rootName = '';
 let hasWorkspace = false;
+let rootGitDirty = false;
 let path: string[] = [];
 let expanded = new Set<string>();
+let visitCounts: Record<string, number> = {};
+let toggles: Toggles = { ...DEFAULT_TOGGLES };
 const dirCache = new Map<string, Entry[]>();
 const pendingRequests = new Set<string>();
 let pendingExpandTrigger: string | null = null;
@@ -52,6 +65,17 @@ function ensureLoaded(key: string): void {
   vscodeApi.postMessage({ type: 'readDir', key });
 }
 
+function recordVisit(key: string): void {
+  visitCounts[key] = (visitCounts[key] ?? 0) + 1;
+  vscodeApi.postMessage({ type: 'recordVisit', key });
+}
+
+function maxVisitCount(): number {
+  let max = 0;
+  for (const v of Object.values(visitCounts)) if (v > max) max = v;
+  return max;
+}
+
 function relativeSegments(basePath: string[], targetKey: string): string[] | null {
   const baseKey = keyJoin(basePath);
   if (targetKey === baseKey) return [];
@@ -75,6 +99,7 @@ function reloadEverythingNeeded(): void {
 }
 
 function onSelectRoot(): void {
+  recordVisit('');
   path = [];
   expanded = new Set();
   persist();
@@ -83,6 +108,8 @@ function onSelectRoot(): void {
 }
 
 function onSelectAt(rowIndex: number, dirName: string): void {
+  const key = keyJoin([...path.slice(0, rowIndex), dirName]);
+  recordVisit(key);
   path = truncateAndSet(path, rowIndex, dirName);
   expanded = new Set();
   persist();
@@ -98,6 +125,7 @@ function onToggleExpand(key: string): void {
     if (!isBOverflowing()) tryBackOff();
     return;
   }
+  recordVisit(key);
   expanded.add(key);
   persist();
   if (dirCache.has(key)) {
@@ -141,8 +169,50 @@ function onOpenFile(key: string): void {
   vscodeApi.postMessage({ type: 'open', key });
 }
 
+function onSetToggle(key: keyof Toggles, value: boolean): void {
+  toggles = { ...toggles, [key]: value };
+  vscodeApi.postMessage({ type: 'setToggle', key, value });
+  render();
+}
+
 function ctxAttr(section: 'entry' | 'root', key: string, isDir: boolean): string {
   return JSON.stringify({ webviewSection: section, path: key, isDir });
+}
+
+function applyFreqColor(el: HTMLElement, key: string): void {
+  if (!toggles.freqColor) {
+    el.style.removeProperty('--freq');
+    return;
+  }
+  const intensity = visitIntensity(visitCounts[key] ?? 0, maxVisitCount());
+  el.style.setProperty('--freq', String(intensity));
+}
+
+function prependDirtyDot(el: HTMLElement): void {
+  const dot = document.createElement('span');
+  dot.className = 'dirty-dot';
+  dot.title = '有未提交的 git 改动';
+  el.insertBefore(dot, el.firstChild);
+}
+
+function renderToggles(container: HTMLElement): void {
+  container.innerHTML = '';
+  const items: { key: keyof Toggles; label: string }[] = [
+    { key: 'groupBox', label: '分组框' },
+    { key: 'freqColor', label: '频率着色' },
+    { key: 'gitDirty', label: 'Git 改动' },
+  ];
+  for (const item of items) {
+    const label = document.createElement('label');
+    label.className = 'toggle-item';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = toggles[item.key];
+    input.addEventListener('change', () => onSetToggle(item.key, input.checked));
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(item.label));
+    container.appendChild(label);
+  }
 }
 
 function renderARegion(container: HTMLElement): void {
@@ -159,22 +229,40 @@ function renderARegion(container: HTMLElement): void {
       rootTag.className = 'a-tag a-tag-root' + (path.length === 0 ? ' selected' : '');
       rootTag.textContent = rootName || '/';
       rootTag.title = rootName;
+      rootTag.setAttribute('data-vscode-context', ctxAttr('root', '', true));
+      if (toggles.gitDirty && rootGitDirty) prependDirtyDot(rootTag);
       rootTag.addEventListener('click', onSelectRoot);
       rowEl.appendChild(rootTag);
     }
 
     const children = dirCache.get(parentKey);
     if (children) {
-      const dirNames = children.filter((e) => e.isDir).map((e) => e.name);
-      const labeled = compressLabels(dirNames);
+      const dirEntries = new Map(children.filter((e) => e.isDir).map((e) => [e.name, e]));
+      const labeled = compressLabels([...dirEntries.keys()]);
+      let groupOpen: HTMLElement | null = null;
       for (const l of labeled) {
+        const key = keyJoin([...path.slice(0, i), l.name]);
         const tagEl = document.createElement('button');
         tagEl.type = 'button';
         tagEl.className = 'a-tag' + (path[i] === l.name ? ' selected' : '');
         tagEl.textContent = l.label;
         tagEl.title = l.name;
+        tagEl.setAttribute('data-vscode-context', ctxAttr('entry', key, true));
+        applyFreqColor(tagEl, key);
+        if (toggles.gitDirty && dirEntries.get(l.name)?.gitDirty) prependDirtyDot(tagEl);
         tagEl.addEventListener('click', () => onSelectAt(i, l.name));
-        rowEl.appendChild(tagEl);
+
+        if (toggles.groupBox && l.groupSize >= 3) {
+          if (l.isGroupStart) {
+            groupOpen = document.createElement('span');
+            groupOpen.className = 'a-tag-group';
+            rowEl.appendChild(groupOpen);
+          }
+          (groupOpen ?? rowEl).appendChild(tagEl);
+        } else {
+          groupOpen = null;
+          rowEl.appendChild(tagEl);
+        }
       }
     }
     container.appendChild(rowEl);
@@ -207,6 +295,13 @@ function renderChildren(parentEl: HTMLElement, dirKey: string, depth: number): v
     icon.className = 'b-icon codicon ' + (entry.isDir ? (expanded.has(childK) ? 'codicon-folder-opened' : 'codicon-folder') : 'codicon-file');
     row.appendChild(icon);
 
+    if (entry.isDir && toggles.gitDirty && entry.gitDirty) {
+      const dot = document.createElement('span');
+      dot.className = 'dirty-dot';
+      dot.title = '有未提交的 git 改动';
+      row.appendChild(dot);
+    }
+
     const label = document.createElement('span');
     label.className = 'b-label';
     label.textContent = entry.name;
@@ -238,21 +333,31 @@ function renderBRegion(container: HTMLElement): void {
 }
 
 function render(): void {
+  const toggleBar = document.getElementById('a-toggles');
   const a = document.getElementById('a-region');
   const b = document.getElementById('b-content');
-  if (!a || !b) return;
+  if (!toggleBar || !a || !b) return;
   if (!hasWorkspace) {
+    toggleBar.innerHTML = '';
     a.innerHTML = '';
     b.textContent = '未打开任何文件夹。';
     return;
   }
+  renderToggles(toggleBar);
   renderARegion(a);
   renderBRegion(b);
 }
 
 window.addEventListener('message', (event: MessageEvent) => {
   const msg = event.data as
-    | { type: 'init'; root: string | null; name?: string }
+    | {
+        type: 'init';
+        root: string | null;
+        name?: string;
+        rootGitDirty?: boolean;
+        visitCounts?: Record<string, number>;
+        toggles?: Toggles;
+      }
     | { type: 'dir'; key: string; entries: Entry[] }
     | { type: 'invalidate'; key: string }
     | { type: 'reset' };
@@ -261,6 +366,9 @@ window.addEventListener('message', (event: MessageEvent) => {
     case 'init': {
       hasWorkspace = msg.root !== null;
       rootName = msg.name ?? '';
+      rootGitDirty = msg.rootGitDirty ?? false;
+      visitCounts = msg.visitCounts ?? {};
+      toggles = msg.toggles ?? { ...DEFAULT_TOGGLES };
       restoreState();
       dirCache.clear();
       pendingRequests.clear();

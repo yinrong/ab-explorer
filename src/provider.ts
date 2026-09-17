@@ -2,11 +2,29 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { readDir } from './fsops';
 import { toKey } from './keys';
+import { hasUncommittedChanges, invalidateGitStatus } from './gitstatus';
+
+export interface Toggles {
+  groupBox: boolean;
+  freqColor: boolean;
+  gitDirty: boolean;
+}
+
+const DEFAULT_TOGGLES: Toggles = { groupBox: true, freqColor: true, gitDirty: true };
+const VISIT_COUNTS_KEY = 'abExplorer.visitCounts';
+const TOGGLES_KEY = 'abExplorer.toggles';
 
 /** ext→web 消息 */
 type ExtToWeb =
-  | { type: 'init'; root: string | null; name?: string }
-  | { type: 'dir'; key: string; entries: { name: string; isDir: boolean }[]; error?: string }
+  | {
+      type: 'init';
+      root: string | null;
+      name?: string;
+      rootGitDirty?: boolean;
+      visitCounts?: Record<string, number>;
+      toggles?: Toggles;
+    }
+  | { type: 'dir'; key: string; entries: { name: string; isDir: boolean; gitDirty?: boolean }[]; error?: string }
   | { type: 'invalidate'; key: string }
   | { type: 'reset' };
 
@@ -14,7 +32,9 @@ type ExtToWeb =
 type WebToExt =
   | { type: 'ready' }
   | { type: 'readDir'; key: string }
-  | { type: 'open'; key: string };
+  | { type: 'open'; key: string }
+  | { type: 'recordVisit'; key: string }
+  | { type: 'setToggle'; key: keyof Toggles; value: boolean };
 
 export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'abExplorer.view';
@@ -23,7 +43,10 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
   private watcher?: vscode.FileSystemWatcher;
   private root?: vscode.Uri;
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext,
+  ) {}
 
   resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -44,6 +67,8 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
   }
 
   public notifyChanged(key: string): void {
+    const abs = this.resolveAbs(key);
+    if (abs) invalidateGitStatus(abs.fsPath);
     this.post({ type: 'invalidate', key });
   }
 
@@ -80,13 +105,42 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
       .map(([k]) => k);
   }
 
+  private getToggles(): Toggles {
+    return this.context.workspaceState.get<Toggles>(TOGGLES_KEY, DEFAULT_TOGGLES);
+  }
+
+  private getVisitCounts(): Record<string, number> {
+    return this.context.workspaceState.get<Record<string, number>>(VISIT_COUNTS_KEY, {});
+  }
+
   private async handleMessage(msg: WebToExt): Promise<void> {
     if (msg.type === 'ready') {
       if (!this.root) {
         this.post({ type: 'init', root: null });
         return;
       }
-      this.post({ type: 'init', root: '', name: path.basename(this.root.fsPath) });
+      this.post({
+        type: 'init',
+        root: '',
+        name: path.basename(this.root.fsPath),
+        rootGitDirty: await hasUncommittedChanges(this.root.fsPath),
+        visitCounts: this.getVisitCounts(),
+        toggles: this.getToggles(),
+      });
+      return;
+    }
+
+    if (msg.type === 'recordVisit') {
+      const counts = this.getVisitCounts();
+      counts[msg.key] = (counts[msg.key] ?? 0) + 1;
+      await this.context.workspaceState.update(VISIT_COUNTS_KEY, counts);
+      return;
+    }
+
+    if (msg.type === 'setToggle') {
+      const toggles = this.getToggles();
+      toggles[msg.key] = msg.value;
+      await this.context.workspaceState.update(TOGGLES_KEY, toggles);
       return;
     }
 
@@ -96,7 +150,14 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
       const abs = this.resolveAbs(msg.key)!;
       try {
         const entries = await readDir(abs.fsPath, this.excludeGlobs());
-        this.post({ type: 'dir', key: msg.key, entries });
+        const withGitStatus = await Promise.all(
+          entries.map(async (e) => {
+            if (!e.isDir) return e;
+            const gitDirty = await hasUncommittedChanges(path.join(abs.fsPath, e.name));
+            return { ...e, gitDirty };
+          }),
+        );
+        this.post({ type: 'dir', key: msg.key, entries: withGitStatus });
       } catch (e) {
         this.post({ type: 'dir', key: msg.key, entries: [], error: String(e) });
       }
@@ -125,6 +186,7 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
 <div id="app">
+  <div id="a-toggles"></div>
   <div id="a-region"></div>
   <div id="b-content"></div>
 </div>

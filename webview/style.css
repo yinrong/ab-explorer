@@ -15,6 +15,24 @@ html, body {
   overflow: hidden;
 }
 
+#a-toggles {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
+}
+
+.toggle-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
 #a-region {
   flex: 0 0 auto;
   display: flex;
@@ -25,20 +43,45 @@ html, body {
 .a-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 2px;
   padding: 3px 4px;
+}
+
+/* 大量共享前缀的目录用一圈细边框整体框起来，让人一眼看出这是一组，
+   同时不引入新颜色、不和频率着色/git 改动图标抢注意力。 */
+.a-tag-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
 }
 
 .a-tag {
   appearance: none;
   border: 1px solid transparent;
   border-radius: 3px;
-  background: var(--vscode-badge-background, transparent);
+  background: color-mix(in srgb, var(--vscode-charts-blue, #3794ff) calc(var(--freq, 0) * 55%), var(--vscode-badge-background, transparent));
   color: var(--vscode-badge-foreground, var(--vscode-foreground));
   padding: 2px 8px;
   font-size: 0.9em;
   cursor: pointer;
   white-space: nowrap;
+}
+
+/* 有未提交 git 改动的目录，前后加一个小圆点——刻意用中性灰而不是新颜色，
+   避免和上面的访问频率着色互相抢注意力。 */
+.dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--vscode-descriptionForeground);
+  opacity: 0.8;
+  vertical-align: middle;
 }
 
 .a-tag:hover {
