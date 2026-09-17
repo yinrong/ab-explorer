@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { readDir } from './fsops';
 import { toKey } from './keys';
 import { hasUncommittedChanges, invalidateGitStatus } from './gitstatus';
+import { recentCommitCount, invalidateActivity } from './activity';
 
 export interface Toggles {
   groupBox: boolean;
@@ -21,10 +22,16 @@ type ExtToWeb =
       root: string | null;
       name?: string;
       rootGitDirty?: boolean;
+      rootActivityCount?: number;
       visitCounts?: Record<string, number>;
       toggles?: Toggles;
     }
-  | { type: 'dir'; key: string; entries: { name: string; isDir: boolean; gitDirty?: boolean }[]; error?: string }
+  | {
+      type: 'dir';
+      key: string;
+      entries: { name: string; isDir: boolean; gitDirty?: boolean; activityCount?: number }[];
+      error?: string;
+    }
   | { type: 'invalidate'; key: string }
   | { type: 'reset' };
 
@@ -68,7 +75,10 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
 
   public notifyChanged(key: string): void {
     const abs = this.resolveAbs(key);
-    if (abs) invalidateGitStatus(abs.fsPath);
+    if (abs) {
+      invalidateGitStatus(abs.fsPath);
+      invalidateActivity(abs.fsPath);
+    }
     this.post({ type: 'invalidate', key });
   }
 
@@ -124,6 +134,7 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
         root: '',
         name: path.basename(this.root.fsPath),
         rootGitDirty: await hasUncommittedChanges(this.root.fsPath),
+        rootActivityCount: await recentCommitCount(this.root.fsPath),
         visitCounts: this.getVisitCounts(),
         toggles: this.getToggles(),
       });
@@ -153,8 +164,12 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
         const withGitStatus = await Promise.all(
           entries.map(async (e) => {
             if (!e.isDir) return e;
-            const gitDirty = await hasUncommittedChanges(path.join(abs.fsPath, e.name));
-            return { ...e, gitDirty };
+            const childPath = path.join(abs.fsPath, e.name);
+            const [gitDirty, activityCount] = await Promise.all([
+              hasUncommittedChanges(childPath),
+              recentCommitCount(childPath),
+            ]);
+            return { ...e, gitDirty, activityCount };
           }),
         );
         this.post({ type: 'dir', key: msg.key, entries: withGitStatus });

@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
+import { isGitRepoRoot } from './gitrepo.ts';
 
 const CACHE_TTL_MS = 3000;
 
@@ -10,15 +9,6 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-
-async function isGitRepoRoot(dirPath: string): Promise<boolean> {
-  try {
-    await fs.access(path.join(dirPath, '.git'));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function runGitStatus(repoRoot: string): Promise<boolean> {
   return new Promise((resolve) => {

@@ -6,6 +6,9 @@ interface Entry {
   name: string;
   isDir: boolean;
   gitDirty?: boolean;
+  /** 最近 14 天内的 git 提交数——不论是在这个插件里点出来的，还是 AI/CLI 在
+   *  VS Code 之外直接改代码提交的，都算进"这个目录最近有没有人在忙"。 */
+  activityCount?: number;
 }
 
 interface Toggles {
@@ -34,6 +37,7 @@ const vscodeApi = acquireVsCodeApi();
 let rootName = '';
 let hasWorkspace = false;
 let rootGitDirty = false;
+let rootActivityCount = 0;
 let path: string[] = [];
 let expanded = new Set<string>();
 let visitCounts: Record<string, number> = {};
@@ -70,9 +74,22 @@ function recordVisit(key: string): void {
   vscodeApi.postMessage({ type: 'recordVisit', key });
 }
 
-function maxVisitCount(): number {
-  let max = 0;
-  for (const v of Object.values(visitCounts)) if (v > max) max = v;
+/** 点击次数 + 最近 git 提交数，作为频率着色的统一热度——两种"访问"同等看待。 */
+function combinedHeat(key: string, activityCount: number | undefined): number {
+  return (visitCounts[key] ?? 0) + (activityCount ?? 0);
+}
+
+/** 扫一遍当前已知的所有目录（含 root），取热度最大值，用来把着色强度归一化。 */
+function maxCombinedHeat(): number {
+  let max = combinedHeat('', rootActivityCount);
+  for (const [dirKey, entries] of dirCache) {
+    for (const e of entries) {
+      if (!e.isDir) continue;
+      const key = dirKey ? `${dirKey}/${e.name}` : e.name;
+      const heat = combinedHeat(key, e.activityCount);
+      if (heat > max) max = heat;
+    }
+  }
   return max;
 }
 
@@ -179,12 +196,12 @@ function ctxAttr(section: 'entry' | 'root', key: string, isDir: boolean): string
   return JSON.stringify({ webviewSection: section, path: key, isDir });
 }
 
-function applyFreqColor(el: HTMLElement, key: string): void {
+function applyFreqColor(el: HTMLElement, key: string, activityCount: number | undefined, globalMax: number): void {
   if (!toggles.freqColor) {
     el.style.removeProperty('--freq');
     return;
   }
-  const intensity = visitIntensity(visitCounts[key] ?? 0, maxVisitCount());
+  const intensity = visitIntensity(combinedHeat(key, activityCount), globalMax);
   el.style.setProperty('--freq', String(intensity));
 }
 
@@ -217,6 +234,7 @@ function renderToggles(container: HTMLElement): void {
 
 function renderARegion(container: HTMLElement): void {
   container.innerHTML = '';
+  const globalMax = maxCombinedHeat();
   const rowCount = Math.max(1, path.length);
   for (let i = 0; i < rowCount; i++) {
     const parentKey = keyJoin(path.slice(0, i));
@@ -230,6 +248,7 @@ function renderARegion(container: HTMLElement): void {
       rootTag.textContent = rootName || '/';
       rootTag.title = rootName;
       rootTag.setAttribute('data-vscode-context', ctxAttr('root', '', true));
+      applyFreqColor(rootTag, '', rootActivityCount, globalMax);
       if (toggles.gitDirty && rootGitDirty) prependDirtyDot(rootTag);
       rootTag.addEventListener('click', onSelectRoot);
       rowEl.appendChild(rootTag);
@@ -248,7 +267,7 @@ function renderARegion(container: HTMLElement): void {
         tagEl.textContent = l.label;
         tagEl.title = l.name;
         tagEl.setAttribute('data-vscode-context', ctxAttr('entry', key, true));
-        applyFreqColor(tagEl, key);
+        applyFreqColor(tagEl, key, dirEntries.get(l.name)?.activityCount, globalMax);
         if (toggles.gitDirty && dirEntries.get(l.name)?.gitDirty) prependDirtyDot(tagEl);
         tagEl.addEventListener('click', () => onSelectAt(i, l.name));
 
@@ -355,6 +374,7 @@ window.addEventListener('message', (event: MessageEvent) => {
         root: string | null;
         name?: string;
         rootGitDirty?: boolean;
+        rootActivityCount?: number;
         visitCounts?: Record<string, number>;
         toggles?: Toggles;
       }
@@ -367,6 +387,7 @@ window.addEventListener('message', (event: MessageEvent) => {
       hasWorkspace = msg.root !== null;
       rootName = msg.name ?? '';
       rootGitDirty = msg.rootGitDirty ?? false;
+      rootActivityCount = msg.rootActivityCount ?? 0;
       visitCounts = msg.visitCounts ?? {};
       toggles = msg.toggles ?? { ...DEFAULT_TOGGLES };
       restoreState();
