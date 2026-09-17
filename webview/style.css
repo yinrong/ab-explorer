@@ -49,12 +49,16 @@ html, body {
 }
 
 /* 大量共享前缀的目录用一圈细边框整体框起来，让人一眼看出这是一组，
-   同时不引入新颜色、不和频率着色/git 改动图标抢注意力。 */
+   同时不引入新颜色、不和频率着色/git 改动图标抢注意力。
+   flex-wrap 是必须的——组内标签数一多（几十个），单行铺不下就得在框内
+   自己换行，不能指望外层 .a-row 把整个框当一个不可切分的整体来换行。 */
 .a-tag-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  padding: 1px;
+  padding: 3px;
+  max-width: 100%;
   border: 1px solid var(--vscode-panel-border);
   border-radius: 4px;
 }
@@ -71,17 +75,16 @@ html, body {
   white-space: nowrap;
 }
 
-/* 有未提交 git 改动的目录，前后加一个小圆点——刻意用中性灰而不是新颜色，
-   避免和上面的访问频率着色互相抢注意力。 */
-.dirty-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: var(--vscode-descriptionForeground);
-  opacity: 0.8;
-  vertical-align: middle;
+/* 有未提交 git 改动的目录，名字前用 VS Code 自己「源代码管理」活动栏用的
+   同一个分支图标（而不是一个普通圆点，容易和别的标记混淆），颜色也用
+   VS Code 的 git 语义色，跟频率着色的蓝色系天然区分开。
+   注：.codicon[class*='codicon-'] 的 font 简写选择器比这里的 class 选择器
+   优先级高，font-size 设了也不会生效（实际按 codicon 默认 16px 显示），
+   所以这里不写它，避免留一行没用的样式误导人。 */
+.dirty-icon {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
 }
 
 .a-tag:hover {

@@ -104,5 +104,53 @@ export function compressLabels(names: string[]): LabeledEntry[] {
     i = j;
   }
 
-  return result;
+  return compactDigitRuns(result);
+}
+
+const TRAILING_DIGITS = /^(\D*)(\d+)$/;
+
+/**
+ * 组内已经砍掉外层公共前缀之后，剩下的差异部分还可能整体共享同一段字母
+ * （比如 "agent1" "agent10" "agent11" ... 全部以 "agent" 开头、后面全是数字），
+ * 而这段 "agent" 不落在任何分隔符边界上，主压缩逻辑够不到它。这里做第二遍、
+ * 只认"连续同字母前缀 + 纯数字尾巴"这一种形状的收紧：同一分组内、字母前缀
+ * 完全相同的连续一串（≥3 个）只留第一个显示完整文字，其余只显示数字。
+ * 只处理连续的（不跨断档），断了就分别按各自的短串处理，不强凑。
+ */
+function compactDigitRuns(entries: LabeledEntry[]): LabeledEntry[] {
+  const out: LabeledEntry[] = [];
+  let i = 0;
+  while (i < entries.length) {
+    const entry = entries[i];
+    if (entry.isGroupStart) {
+      out.push(entry);
+      i++;
+      continue;
+    }
+    const match = TRAILING_DIGITS.exec(entry.label.slice(1));
+    if (!match || match[1].length < 2) {
+      out.push(entry);
+      i++;
+      continue;
+    }
+    const alpha = match[1];
+    let j = i;
+    while (j < entries.length && !entries[j].isGroupStart) {
+      const m = TRAILING_DIGITS.exec(entries[j].label.slice(1));
+      if (!m || m[1] !== alpha) break;
+      j++;
+    }
+    const run = entries.slice(i, j);
+    if (run.length >= 3) {
+      out.push(run[0]);
+      for (let k = 1; k < run.length; k++) {
+        const digits = TRAILING_DIGITS.exec(run[k].label.slice(1))![2];
+        out.push({ ...run[k], label: '-' + digits });
+      }
+    } else {
+      out.push(...run);
+    }
+    i = j;
+  }
+  return out;
 }

@@ -101,3 +101,42 @@ test('两个目录仅共享短通用前缀时仍可压缩成一个小组，但�
     ['3d-man3', '-man4'],
   );
 });
+
+test('组内差异部分整体共享一段字母+纯数字尾巴时，只留第一个显示完整文字', () => {
+  // soft_company-agent1 .. soft_company-agent65 真实场景：外层前缀砍掉之后
+  // 剩下的 agent1/agent10/agent11/... 还整体共享 "agent" 这段非分隔符边界的
+  // 前缀，不应该让 29 个标签都各自把 "agent" 重复一遍。
+  const names = [
+    'soft_company',
+    'soft_company-agent1',
+    'soft_company-agent2',
+    'soft_company-agent3',
+    'soft_company-agent10',
+  ];
+  const result = compressLabels(names);
+  // 目录名按字符串排序（不是数值排序），所以 "agent10" 排在 "agent2" 前面——
+  // 这是排序方式本身带来的、和这条压缩规则无关的既有行为。
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['soft_company', '-agent1', '-10', '-2', '-3'],
+  );
+});
+
+test('数字尾巴压缩只在同一分组内的连续同字母前缀上生效，达到 3 个才触发', () => {
+  const result = compressLabels(['3d-man1', '3d-man1-agent1', '3d-man1-agent2']);
+  // 只有 2 个 agentN，不够 3 个门槛，各自保留完整差异文字
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['3d-man1', '-agent1', '-agent2'],
+  );
+});
+
+test('数字尾巴压缩不吃掉本来就没有共同字母前缀的纯数字标签', () => {
+  // ai-growth-plan-1 / ai-growth-plan-2 的差异部分本来就只是 "1"/"2"，
+  // alpha 前缀为空，不该被这条规则误当成需要压缩的一组。
+  const result = compressLabels(['ai', 'ai-growth-plan', 'ai-growth-plan-1', 'ai-growth-plan-2']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['ai', '-growth-plan', '-1', '-2'],
+  );
+});

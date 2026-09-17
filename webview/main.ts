@@ -207,7 +207,7 @@ function applyFreqColor(el: HTMLElement, key: string, activityCount: number | un
 
 function prependDirtyDot(el: HTMLElement): void {
   const dot = document.createElement('span');
-  dot.className = 'dirty-dot';
+  dot.className = 'dirty-icon codicon codicon-source-control';
   dot.title = '有未提交的 git 改动';
   el.insertBefore(dot, el.firstChild);
 }
@@ -316,7 +316,7 @@ function renderChildren(parentEl: HTMLElement, dirKey: string, depth: number): v
 
     if (entry.isDir && toggles.gitDirty && entry.gitDirty) {
       const dot = document.createElement('span');
-      dot.className = 'dirty-dot';
+      dot.className = 'dirty-icon codicon codicon-source-control';
       dot.title = '有未提交的 git 改动';
       row.appendChild(dot);
     }
