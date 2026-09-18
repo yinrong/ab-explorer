@@ -10,7 +10,7 @@ interface EntryContext {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new AbExplorerViewProvider(context.extensionUri);
+  const provider = new AbExplorerViewProvider(context.extensionUri, context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(AbExplorerViewProvider.viewType, provider),

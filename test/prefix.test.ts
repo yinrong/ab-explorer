@@ -44,9 +44,107 @@ test('组基名本身以分隔符结尾时，后续目录仍按该边界压缩',
 
 test('单个目录不压缩', () => {
   const result = compressLabels(['solo']);
-  assert.deepEqual(result, [{ name: 'solo', label: 'solo', isGroupStart: true }]);
+  assert.deepEqual(result, [{ name: 'solo', label: 'solo', isGroupStart: true, groupSize: 1 }]);
 });
 
 test('空数组返回空数组', () => {
   assert.deepEqual(compressLabels([]), []);
+});
+
+test('完整前缀要一次性清除干净，不能只砍掉前缀内部的第一个分隔符', () => {
+  // 实测踩过的坑：3d-man1 的完整前缀曾经只被砍掉 "3d-"，
+  // 留下 "-man1-agent1" 这种还带着冗余前缀的标签。
+  const result = compressLabels(['3d-man1', '3d-man1-agent1', '3d-man1-agent2']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['3d-man1', '-agent1', '-agent2'],
+  );
+  assert.deepEqual(
+    result.map((r) => r.groupSize),
+    [3, 3, 3],
+  );
+});
+
+test('旁支目录只是碰巧共享一小段通用前缀，不应被并进同一组', () => {
+  // 3d-man2 和 3d-man1 系列只共享泛泛的 "3d-"，不能因为链上某个深层
+  // 条目（3d-man1-agent4）跟它有更短的公共前缀就把它错误地并进那一组。
+  const result = compressLabels(['3d-man1', '3d-man1-agent1', '3d-man1-agent2', '3d-man2']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['3d-man1', '-agent1', '-agent2', '3d-man2'],
+  );
+  assert.deepEqual(
+    result.map((r) => r.isGroupStart),
+    [true, false, false, true],
+  );
+});
+
+test('组前缀在链条中途变浅（回退到锚点自身的前缀）时仍要继续压缩', () => {
+  // ai 系列：ai-growth-plan-1/2 比 ai-manage 更深地共享 "ai-growth-plan-"，
+  // 但 ai-manage 应该回退用锚点 "ai" 自己的前缀 "ai-" 继续压缩，
+  // 而不是因为链上最近一个是 "ai-growth-plan-2" 就整组断掉。
+  const result = compressLabels(['ai', 'ai-growth-plan', 'ai-growth-plan-1', 'ai-growth-plan-2', 'ai-manage']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['ai', '-growth-plan', '-1', '-2', '-manage'],
+  );
+  assert.deepEqual(
+    result.map((r) => r.groupSize),
+    [5, 5, 5, 5, 5],
+  );
+});
+
+test('两个目录仅共享短通用前缀时仍可压缩成一个小组，但不会继续拉长', () => {
+  const result = compressLabels(['3d-man3', '3d-man4']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['3d-man3', '-man4'],
+  );
+});
+
+test('组内差异部分整体共享一段字母+纯数字尾巴时，只留第一个显示完整文字', () => {
+  // soft_company-agent1 .. soft_company-agent65 真实场景：外层前缀砍掉之后
+  // 剩下的 agent1/agent10/agent11/... 还整体共享 "agent" 这段非分隔符边界的
+  // 前缀，不应该让 29 个标签都各自把 "agent" 重复一遍。
+  const names = [
+    'soft_company',
+    'soft_company-agent1',
+    'soft_company-agent2',
+    'soft_company-agent3',
+    'soft_company-agent10',
+  ];
+  const result = compressLabels(names);
+  // 目录名按数值感知排序（"agent2" < "agent10"），所以数字尾巴压缩后
+  // 仍然是从小到大的直观顺序。
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['soft_company', '-agent1', '-2', '-3', '-10'],
+  );
+});
+
+test('数字尾巴压缩只在同一分组内的连续同字母前缀上生效，达到 3 个才触发', () => {
+  const result = compressLabels(['3d-man1', '3d-man1-agent1', '3d-man1-agent2']);
+  // 只有 2 个 agentN，不够 3 个门槛，各自保留完整差异文字
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['3d-man1', '-agent1', '-agent2'],
+  );
+});
+
+test('排序按数值感知，agent10 不会排到 agent2 前面', () => {
+  const result = compressLabels(['x-agent10', 'x-agent2', 'x-agent1']);
+  assert.deepEqual(
+    result.map((r) => r.name),
+    ['x-agent1', 'x-agent2', 'x-agent10'],
+  );
+});
+
+test('数字尾巴压缩不吃掉本来就没有共同字母前缀的纯数字标签', () => {
+  // ai-growth-plan-1 / ai-growth-plan-2 的差异部分本来就只是 "1"/"2"，
+  // alpha 前缀为空，不该被这条规则误当成需要压缩的一组。
+  const result = compressLabels(['ai', 'ai-growth-plan', 'ai-growth-plan-1', 'ai-growth-plan-2']);
+  assert.deepEqual(
+    result.map((r) => r.label),
+    ['ai', '-growth-plan', '-1', '-2'],
+  );
 });

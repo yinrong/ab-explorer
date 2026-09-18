@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "local",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yinrong/ab-explorer.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -121,6 +125,11 @@
           "type": "boolean",
           "default": true,
           "description": "是否附加使用 files.exclude 过滤条目"
+        },
+        "abExplorer.autoReveal": {
+          "type": "boolean",
+          "default": true,
+          "description": "切换编辑器里的活动文件时，自动定位并展开到该文件"
         }
       }
     }

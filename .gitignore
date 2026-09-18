@@ -4,3 +4,4 @@ dist/
 media/codicon.css
 media/codicon.ttf
 rm/
+.claude/worktrees/

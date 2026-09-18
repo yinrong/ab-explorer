@@ -15,6 +15,24 @@ html, body {
   overflow: hidden;
 }
 
+#a-toggles {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border));
+}
+
+.toggle-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  font-size: 0.85em;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
 #a-region {
   flex: 0 0 auto;
   display: flex;
@@ -25,20 +43,48 @@ html, body {
 .a-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 2px;
   padding: 3px 4px;
+}
+
+/* 大量共享前缀的目录用一圈细边框整体框起来，让人一眼看出这是一组，
+   同时不引入新颜色、不和频率着色/git 改动图标抢注意力。
+   flex-wrap 是必须的——组内标签数一多（几十个），单行铺不下就得在框内
+   自己换行，不能指望外层 .a-row 把整个框当一个不可切分的整体来换行。 */
+.a-tag-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  max-width: 100%;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
 }
 
 .a-tag {
   appearance: none;
   border: 1px solid transparent;
   border-radius: 3px;
-  background: var(--vscode-badge-background, transparent);
+  background: color-mix(in srgb, var(--vscode-charts-blue, #3794ff) calc(var(--freq, 0) * 55%), var(--vscode-badge-background, transparent));
   color: var(--vscode-badge-foreground, var(--vscode-foreground));
   padding: 2px 8px;
   font-size: 0.9em;
   cursor: pointer;
   white-space: nowrap;
+}
+
+/* 有未提交 git 改动的目录，名字前用 VS Code 自己「源代码管理」活动栏用的
+   同一个分支图标（而不是一个普通圆点，容易和别的标记混淆），颜色也用
+   VS Code 的 git 语义色，跟频率着色的蓝色系天然区分开。
+   注：.codicon[class*='codicon-'] 的 font 简写选择器比这里的 class 选择器
+   优先级高，font-size 设了也不会生效（实际按 codicon 默认 16px 显示），
+   所以这里不写它，避免留一行没用的样式误导人。 */
+.dirty-icon {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
 }
 
 .a-tag:hover {
@@ -73,6 +119,12 @@ html, body {
 
 .b-row:hover {
   background: var(--vscode-list-hoverBackground);
+}
+
+/* 编辑器里当前打开的文件：跟 VS Code 原生资源管理器一样用未聚焦选中色，
+   比 hover 明显、又不是 A 区标签那种强选中色，两个视觉信号不会撞在一起。 */
+.b-row.current-file {
+  background: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.08));
 }
 
 .b-twisty, .b-icon {
