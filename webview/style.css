@@ -121,6 +121,12 @@ html, body {
   background: var(--vscode-list-hoverBackground);
 }
 
+/* 编辑器里当前打开的文件：跟 VS Code 原生资源管理器一样用未聚焦选中色，
+   比 hover 明显、又不是 A 区标签那种强选中色，两个视觉信号不会撞在一起。 */
+.b-row.current-file {
+  background: var(--vscode-list-inactiveSelectionBackground, rgba(255, 255, 255, 0.08));
+}
+
 .b-twisty, .b-icon {
   flex: 0 0 auto;
   width: 16px;

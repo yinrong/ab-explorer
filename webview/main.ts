@@ -1,6 +1,6 @@
 import { compressLabels } from './prefix';
 import { visitIntensity } from './frequency';
-import { truncateAndSet, drillDownTo, backOffOne } from './statemachine';
+import { truncateAndSet, drillDownTo, backOffOne, pathForReveal } from './statemachine';
 
 interface Entry {
   name: string;
@@ -42,6 +42,10 @@ let path: string[] = [];
 let expanded = new Set<string>();
 let visitCounts: Record<string, number> = {};
 let toggles: Toggles = { ...DEFAULT_TOGGLES };
+let currentFile: string | null = null;
+let pendingScrollToCurrentFile = false;
+/** revealFile 有可能在 init 处理完之前就到——先记下来，init 里补跑一次。 */
+let pendingRevealKey: string | null = null;
 const dirCache = new Map<string, Entry[]>();
 const pendingRequests = new Set<string>();
 let pendingExpandTrigger: string | null = null;
@@ -186,6 +190,41 @@ function onOpenFile(key: string): void {
   vscodeApi.postMessage({ type: 'open', key });
 }
 
+/**
+ * 编辑器切换活动文件时同步：文件不在当前 B 区子树下就把 path 收回根，
+ * 展开从 B 区根到文件所在目录的每一级祖先，再走一次和手动展开一样的
+ * 溢出检测（需要的话一次性下钻到文件所在目录，不需要就留在原模式）。
+ */
+function revealFile(fileKey: string): void {
+  path = pathForReveal(path, fileKey);
+
+  const rel = relativeSegments(path, fileKey);
+  if (rel === null || rel.length === 0) return;
+
+  const dirSegments = rel.slice(0, -1);
+  let parentKey = keyJoin(path);
+  for (const seg of dirSegments) {
+    parentKey = parentKey ? `${parentKey}/${seg}` : seg;
+    expanded.add(parentKey);
+    ensureLoaded(parentKey);
+  }
+
+  currentFile = fileKey;
+  pendingScrollToCurrentFile = true;
+  persist();
+  render();
+  checkOverflowAfterExpand(parentKey);
+}
+
+function scrollToCurrentFile(): void {
+  if (!currentFile) return;
+  const el = document.querySelector('[data-current-file="true"]');
+  if (el) {
+    el.scrollIntoView({ block: 'nearest' });
+    pendingScrollToCurrentFile = false;
+  }
+}
+
 function onSetToggle(key: keyof Toggles, value: boolean): void {
   toggles = { ...toggles, [key]: value };
   vscodeApi.postMessage({ type: 'setToggle', key, value });
@@ -301,9 +340,10 @@ function renderChildren(parentEl: HTMLElement, dirKey: string, depth: number): v
   for (const entry of entries) {
     const childK = dirKey ? `${dirKey}/${entry.name}` : entry.name;
     const row = document.createElement('div');
-    row.className = 'b-row';
+    row.className = 'b-row' + (childK === currentFile ? ' current-file' : '');
     row.style.paddingLeft = `${depth * 16}px`;
     row.setAttribute('data-vscode-context', ctxAttr('entry', childK, entry.isDir));
+    if (childK === currentFile) row.setAttribute('data-current-file', 'true');
 
     const twisty = document.createElement('span');
     twisty.className =
@@ -365,6 +405,7 @@ function render(): void {
   renderToggles(toggleBar);
   renderARegion(a);
   renderBRegion(b);
+  if (pendingScrollToCurrentFile) scrollToCurrentFile();
 }
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -380,7 +421,8 @@ window.addEventListener('message', (event: MessageEvent) => {
       }
     | { type: 'dir'; key: string; entries: Entry[] }
     | { type: 'invalidate'; key: string }
-    | { type: 'reset' };
+    | { type: 'reset' }
+    | { type: 'revealFile'; key: string };
 
   switch (msg.type) {
     case 'init': {
@@ -395,6 +437,11 @@ window.addEventListener('message', (event: MessageEvent) => {
       pendingRequests.clear();
       if (hasWorkspace) reloadEverythingNeeded();
       render();
+      if (hasWorkspace && pendingRevealKey) {
+        const key = pendingRevealKey;
+        pendingRevealKey = null;
+        revealFile(key);
+      }
       break;
     }
     case 'dir': {
@@ -419,6 +466,11 @@ window.addEventListener('message', (event: MessageEvent) => {
       dirCache.clear();
       pendingRequests.clear();
       if (hasWorkspace) reloadEverythingNeeded();
+      break;
+    }
+    case 'revealFile': {
+      if (hasWorkspace) revealFile(msg.key);
+      else pendingRevealKey = msg.key;
       break;
     }
   }

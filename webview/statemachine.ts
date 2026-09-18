@@ -27,3 +27,14 @@ export function drillDownTo(path: string[], relSegmentsFromBRoot: string[]): str
 export function backOffOne(path: string[]): string[] {
   return path.slice(0, -1);
 }
+
+/**
+ * 编辑器切换活动文件时，判断当前 path（B 区树根）要不要收回到工作区根：
+ * 目标文件已经在当前 B 区子树下就不动 path（不打断用户正在看的层级），
+ * 不在的话收回根，让 B 区重新覆盖到这个文件。
+ */
+export function pathForReveal(path: string[], fileKey: string): string[] {
+  const rootKey = path.join('/');
+  const withinCurrent = fileKey === rootKey || fileKey.startsWith(rootKey ? rootKey + '/' : '');
+  return withinCurrent ? path : [];
+}

@@ -33,7 +33,8 @@ type ExtToWeb =
       error?: string;
     }
   | { type: 'invalidate'; key: string }
-  | { type: 'reset' };
+  | { type: 'reset' }
+  | { type: 'revealFile'; key: string };
 
 /** web→ext 消息 */
 type WebToExt =
@@ -48,6 +49,7 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private watcher?: vscode.FileSystemWatcher;
+  private activeEditorSub?: vscode.Disposable;
   private root?: vscode.Uri;
 
   constructor(
@@ -63,10 +65,28 @@ export class AbExplorerViewProvider implements vscode.WebviewViewProvider {
     };
     webviewView.webview.html = this.getHtml(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((msg: WebToExt) => this.handleMessage(msg));
-    webviewView.onDidDispose(() => this.disposeWatcher());
+    webviewView.onDidDispose(() => {
+      this.disposeWatcher();
+      this.activeEditorSub?.dispose();
+      this.activeEditorSub = undefined;
+    });
 
     this.root = vscode.workspace.workspaceFolders?.[0]?.uri;
     this.setupWatcher();
+
+    this.activeEditorSub = vscode.window.onDidChangeActiveTextEditor((editor) => this.revealActiveEditor(editor));
+    this.revealActiveEditor(vscode.window.activeTextEditor);
+  }
+
+  private revealActiveEditor(editor: vscode.TextEditor | undefined): void {
+    if (!this.root || !editor) return;
+    if (!vscode.workspace.getConfiguration('abExplorer').get<boolean>('autoReveal', true)) return;
+    const uri = editor.document.uri;
+    if (uri.scheme !== 'file') return;
+    const rootFsPath = this.root.fsPath.endsWith(path.sep) ? this.root.fsPath : this.root.fsPath + path.sep;
+    if (!uri.fsPath.startsWith(rootFsPath)) return;
+    const key = toKey(path.relative(this.root.fsPath, uri.fsPath));
+    this.post({ type: 'revealFile', key });
   }
 
   public refresh(): void {
